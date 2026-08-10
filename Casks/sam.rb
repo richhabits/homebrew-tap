@@ -1,11 +1,11 @@
 cask "sam" do
-  version "3.2.4"
+  version "3.3.2"
   on_arm do
-    sha256 "cea1b90a57ca26cbb0fe7552263bade8ac9ff52fd8d58f0ba3445fc0546bb7a0"
+    sha256 "3c4bb98fe38ab973cd781475a7db4302af8464a34faab12f6b45be3033d9472d"
     url "https://github.com/richhabits/sam/releases/download/v#{version}/SAM-#{version}-arm64.dmg"
   end
   on_intel do
-    sha256 "22e460781501c25dfa74620e1c525ea088f4d4704b87debeedd9a32b7fe90a36"
+    sha256 "68429c238b5ee4b09634ba82a5562134cbb7b1e5be579d97ec567781d13cfb2b"
     url "https://github.com/richhabits/sam/releases/download/v#{version}/SAM-#{version}.dmg"
   end
   name "SAM"
