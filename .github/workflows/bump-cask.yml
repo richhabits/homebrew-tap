@@ -1,25 +1,19 @@
 # ─────────────────────────────────────────────────────────────
-#  Keep Casks/sam.rb pointing at the latest SAM release.
+#  Manual bump of Casks/sam.rb against richhabits/sam releases.
 #
 #  WHY THIS LIVES HERE, and not in richhabits/sam. The release workflow over there has a step
 #  that pushes this cask, but it needs a cross-repo PAT (HOMEBREW_TAP_TOKEN) to write to this
-#  repo — and when that secret is missing the step just skips. It skipped for six months: the
-#  cask sat at v1.5.0 while SAM shipped v3.1.1, so `brew install --cask richhabits/tap/sam`
-#  handed people a build from another era, and every single release still looked green.
+#  repo — and when that secret is missing the step just skips.
 #
-#  A workflow that lives in the repo it writes to needs no PAT at all — the built-in
-#  GITHUB_TOKEN can commit here. richhabits/sam is public, so reading its releases needs no
-#  auth either. Nothing to provision, nothing to rotate, nothing to forget.
-#
-#  Hourly rather than on-release, for the same reason: an on-release trigger would need the
-#  upstream repo to hold a token for this one. A new release is live in the tap within the hour
-#  and nobody has to remember anything.
+#  Hourly cron is OFF. SAM 3.7.0 is Apple Silicon only (no Intel DMG). The old job required
+#  both hashes in SHA256SUMS.txt, failed every hour, and left the cask stuck on 3.5.0.
+#  The live cask is: arm → 3.7.0, intel → last Intel build 3.5.0. Do not auto-write an
+#  Intel URL that does not exist. Bump by hand (workflow_dispatch) when a new *pair* of
+#  Mac DMGs ships, or edit Casks/sam.rb directly.
 # ─────────────────────────────────────────────────────────────
 name: Bump SAM cask
 
 on:
-  schedule:
-    - cron: "17 * * * *"     # hourly, off the hour — the top of the hour is the busiest queue
   workflow_dispatch:
 
 permissions:
@@ -35,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Bump the cask if upstream is ahead
+      - name: Bump the cask if upstream shipped both Mac DMGs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UPSTREAM: richhabits/sam
@@ -52,18 +46,20 @@ jobs:
             exit 0
           fi
 
-          # The release publishes SHA256SUMS.txt. Take the hashes from it rather than
-          # re-downloading ~370MB of disk images just to compute what is already published.
-          gh release download "$TAG" -R "$UPSTREAM" -p 'SHA256SUMS.txt' --clobber
+          # Prefer SHA256SUMS.txt. 3.7.0 did not attach one with both Mac DMGs — refuse a
+          # half-written Intel URL rather than shipping a cask that 404s on Intel.
+          gh release download "$TAG" -R "$UPSTREAM" -p 'SHA256SUMS.txt' --clobber || true
 
-          ARM="$(grep -iE "arm64\.dmg" SHA256SUMS.txt | grep -oiE '[a-f0-9]{64}' | head -1 || true)"
-          INTEL="$(grep -iE "SAM-${V}\.dmg" SHA256SUMS.txt | grep -oiE '[a-f0-9]{64}' | head -1 || true)"
+          ARM=""
+          INTEL=""
+          if [ -f SHA256SUMS.txt ]; then
+            ARM="$(grep -iE "arm64\.dmg" SHA256SUMS.txt | grep -oiE '[a-f0-9]{64}' | head -1 || true)"
+            INTEL="$(grep -iE "SAM-${V}\.dmg" SHA256SUMS.txt | grep -oiE '[a-f0-9]{64}' | head -1 || true)"
+          fi
 
-          # Refuse to write a cask we cannot fully verify. A cask with a wrong or empty sha256
-          # fails at install time for every user, which is worse than staying one version behind.
           if [ -z "$ARM" ] || [ -z "$INTEL" ]; then
-            echo "::error title=Cask NOT bumped::$TAG published SHA256SUMS.txt without both mac dmg hashes (arm64='$ARM' intel='$INTEL'). Leaving the cask at $CUR rather than writing one that fails to install."
-            exit 1
+            echo "::notice title=Cask NOT auto-bumped::$TAG has no Intel DMG (or no SHA256SUMS). Edit Casks/sam.rb by hand — arm-only current, keep last Intel version. Not a failure of the tap."
+            exit 0
           fi
 
           cat > Casks/sam.rb <<CASK
